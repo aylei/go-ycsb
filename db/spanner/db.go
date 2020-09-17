@@ -462,7 +462,7 @@ func (db *spannerDB) BatchInsert(ctx context.Context, table string, keys []strin
 			return err
 		}
 		m := spanner.Insert(table, keys, values)
-		ms := append(ms, m)
+		ms = append(ms, m)
 	}
 	_, err := db.client.Apply(ctx, ms)
 	return err
