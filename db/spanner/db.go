@@ -364,6 +364,10 @@ func (db *spannerDB) Read(ctx context.Context, table string, key string, fields 
 	return rows[0], nil
 }
 
+func (db *spannerDB) BatchRead(ctx context.Context, table string, keys []string, fields []string) ([]map[string][]byte, error) {
+	return nil, errors.New("Unimplemented")
+}
+
 func (db *spannerDB) Scan(ctx context.Context, table string, startKey string, count int, fields []string) ([]map[string][]byte, error) {
 	var query string
 	if len(fields) == 0 {
@@ -433,6 +437,10 @@ func (db *spannerDB) Update(ctx context.Context, table string, key string, mutat
 	return err
 }
 
+func (db *spannerDB) BatchUpdate(ctx context.Context, table string, keys []string, values []map[string][]byte) error {
+	return errors.New("Unimplemented")
+}
+
 func (db *spannerDB) Insert(ctx context.Context, table string, key string, mutations map[string][]byte) error {
 	state := ctx.Value(stateKey).(*spannerState)
 	keys, values, err := createMutations(key, mutations, state.Fields)
@@ -444,11 +452,32 @@ func (db *spannerDB) Insert(ctx context.Context, table string, key string, mutat
 	return err
 }
 
+
+func (db *spannerDB) BatchInsert(ctx context.Context, table string, keys []string, values []map[string][]byte) error {
+	state := ctx.Value(stateKey).(*spannerState)
+	var ms []*spanner.Mutation
+	for i, key := range keys {
+		keys, values, err := createMutations(key, values[i], state.Fields)
+		if err != nil {
+			return err
+		}
+		m := spanner.Insert(table, keys, values)
+		ms := append(ms, m)
+	}
+	_, err := db.client.Apply(ctx, ms)
+	return err
+}
+
 func (db *spannerDB) Delete(ctx context.Context, table string, key string) error {
 	m := spanner.Delete(table, spanner.Key{key})
 	_, err := db.client.Apply(ctx, []*spanner.Mutation{m})
 	return err
 }
+
+func (db *spannerDB) BatchDelete(ctx context.Context, table string, keys []string) error {
+	return errors.New("Unimplemented")
+}
+
 
 func init() {
 	ycsb.RegisterDBCreator("spanner", spannerCreator{})
