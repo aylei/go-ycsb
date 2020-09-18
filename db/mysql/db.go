@@ -180,7 +180,8 @@ func (db *mysqlDB) getAndCacheStmt(ctx context.Context, query string) (*sql.Stmt
 	stmt, err := state.conn.PrepareContext(ctx, query)
 	if err == sql.ErrConnDone {
 		// Try build the connection and prepare again
-		if state.conn, err = db.db.Conn(ctx); err == nil {
+		if conn, err := db.db.Conn(ctx); err == nil {
+			state.conn = conn
 			stmt, err = state.conn.PrepareContext(ctx, query)
 		}
 	}
