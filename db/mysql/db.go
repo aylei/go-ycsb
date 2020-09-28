@@ -80,8 +80,15 @@ func (c mysqlCreator) Create(p *properties.Properties) (ycsb.DB, error) {
 	}
 
 	threadCount := int(p.GetInt64(prop.ThreadCount, prop.ThreadCountDefault))
-	db.SetMaxIdleConns(threadCount + 1)
-	db.SetMaxOpenConns(threadCount * 2)
+	if p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
+		// Large enough max open count to avoid reusing returned conn
+		db.SetMaxOpenConns(threadCount * 2)
+		// No idle conn, every conn is closed when returned to the pool
+		db.SetMaxIdleConns(-1)
+	} else {
+		db.SetMaxIdleConns(threadCount + 1)
+		db.SetMaxOpenConns(threadCount * 2)
+	}
 	d.db = db
 
 	d.verbose = p.GetBool(prop.Verbose, prop.VerboseDefault)
@@ -99,22 +106,22 @@ func (c mysqlCreator) Create(p *properties.Properties) (ycsb.DB, error) {
 }
 
 func (db *mysqlDB) getDB() (*sql.DB, error) {
-	p := db.p
-	if p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
-		host := p.GetString(mysqlHost, "127.0.0.1")
-		port := p.GetInt(mysqlPort, 3306)
-		user := p.GetString(mysqlUser, "root")
-		password := p.GetString(mysqlPassword, "")
-		dbName := p.GetString(mysqlDBName, "test")
-
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", user, password, host, port, dbName)
-		myDB, err := sql.Open("mysql", dsn)
-		if err != nil {
-			return nil, err
-		}
-		myDB.SetMaxOpenConns(1)
-		return myDB, nil
-	}
+	//p := db.p
+	//if p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
+	//	host := p.GetString(mysqlHost, "127.0.0.1")
+	//	port := p.GetInt(mysqlPort, 3306)
+	//	user := p.GetString(mysqlUser, "root")
+	//	password := p.GetString(mysqlPassword, "")
+	//	dbName := p.GetString(mysqlDBName, "test")
+	//
+	//	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", user, password, host, port, dbName)
+	//	myDB, err := sql.Open("mysql", dsn)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	myDB.SetMaxOpenConns(1)
+	//	return myDB, nil
+	//}
 	return db.db, nil
 }
 
@@ -192,6 +199,10 @@ func (db *mysqlDB) InitThread(ctx context.Context, _ int, _ int) context.Context
 		conn:      conn,
 	}
 
+	if db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
+		conn.Close()
+	}
+
 	return context.WithValue(ctx, stateKey, state)
 }
 
@@ -227,6 +238,15 @@ func (db *mysqlDB) getAndCacheStmt(ctx context.Context, query string) (*sql.Stmt
 	return stmt, nil
 }
 
+func (db *mysqlDB) queryContextInNewConn(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	conn, err := db.db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	return conn.QueryContext(ctx, query, args)
+}
+
 func (db *mysqlDB) clearCacheIfFailed(ctx context.Context, query string, err error) {
 	if err == nil {
 		return
@@ -247,13 +267,7 @@ func (db *mysqlDB) queryRows(ctx context.Context, query string, count int, args 
 	var rows *sql.Rows
 	var err error
 	if db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
-		var myDB *sql.DB
-		myDB, err = db.getDB()
-		if err != nil {
-			return nil, err
-		}
-		defer db.CloseShortConnDB(myDB)
-		rows, err = myDB.QueryContext(ctx, query, args...)
+		rows, err = db.queryContextInNewConn(ctx, query, args...)
 	} else {
 		var stmt *sql.Stmt
 		stmt, err = db.getAndCacheStmt(ctx, query)
@@ -339,13 +353,7 @@ func (db *mysqlDB) execQuery(ctx context.Context, query string, args ...interfac
 
 	var err error
 	if db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
-		var myDB *sql.DB
-		myDB, err = db.getDB()
-		if err != nil {
-			return err
-		}
-		defer db.CloseShortConnDB(myDB)
-		_, err = myDB.QueryContext(ctx, query, args...)
+		_, err = db.queryContextInNewConn(ctx, query, args...)
 	} else {
 		var stmt *sql.Stmt
 		stmt, err = db.getAndCacheStmt(ctx, query)
