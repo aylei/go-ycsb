@@ -236,7 +236,7 @@ func (db *mysqlDB) queryContextInNewConn(ctx context.Context, query string, args
 		return nil, err
 	}
 	defer conn.Close()
-	return conn.QueryContext(ctx, query, args)
+	return conn.QueryContext(ctx, query, args...)
 }
 
 func (db *mysqlDB) clearCacheIfFailed(ctx context.Context, query string, err error) {
