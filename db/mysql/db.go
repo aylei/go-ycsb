@@ -230,19 +230,6 @@ func (db *mysqlDB) getAndCacheStmt(ctx context.Context, query string) (*sql.Stmt
 	return stmt, nil
 }
 
-func (db *mysqlDB) queryContextInNewConn(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	conn, err := db.db.Conn(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := conn.Close(); err != nil && !db.p.GetBool(prop.Silence, prop.SilenceDefault){
-			fmt.Printf("err closing mysql connection: %v\n", err)
-		}
-	}()
-	return conn.QueryContext(ctx, query, args...)
-}
-
 func (db *mysqlDB) execContextInNewConn(ctx context.Context, query string, args ...interface{}) error {
 	conn, err := db.db.Conn(ctx)
 	if err != nil {
@@ -276,15 +263,21 @@ func (db *mysqlDB) queryRows(ctx context.Context, query string, count int, args 
 
 	var rows *sql.Rows
 	var err error
-	if db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
-		rows, err = db.queryContextInNewConn(ctx, query, args...)
-	} else {
+	var conn *sql.Conn
+	if !db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
 		var stmt *sql.Stmt
 		stmt, err = db.getAndCacheStmt(ctx, query)
 		if err != nil {
 			return nil, err
 		}
 		rows, err = stmt.QueryContext(ctx, args...)
+	} else {
+		conn, err = db.db.Conn(ctx)
+		if err != nil {
+			return nil, err
+		}
+		rows, err = conn.QueryContext(ctx, query, args...)
+		defer conn.Close()
 	}
 	if err != nil {
 		return nil, err
