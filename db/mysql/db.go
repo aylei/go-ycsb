@@ -125,12 +125,6 @@ func (db *mysqlDB) getDB() (*sql.DB, error) {
 	return db.db, nil
 }
 
-func (db *mysqlDB) CloseShortConnDB(myDB *sql.DB) {
-	if db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
-		myDB.Close()
-	}
-}
-
 func (db *mysqlDB) createTable() error {
 	tableName := db.p.GetString(prop.TableName, prop.TableNameDefault)
 
@@ -139,7 +133,6 @@ func (db *mysqlDB) createTable() error {
 		if err != nil {
 			return err
 		}
-		defer db.CloseShortConnDB(myDB)
 		if _, err := myDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)); err != nil {
 			return err
 		}
@@ -175,7 +168,6 @@ func (db *mysqlDB) createTable() error {
 	if err != nil {
 		return err
 	}
-	defer db.CloseShortConnDB(myDB)
 	_, err = myDB.Exec(buf.String())
 	return err
 }
@@ -444,7 +436,6 @@ func (db *mysqlDB) Analyze(ctx context.Context, table string) error {
 	if err != nil {
 		return err
 	}
-	defer db.CloseShortConnDB(myDB)
 	_, err = myDB.Exec(fmt.Sprintf(`ANALYZE TABLE %s`, table))
 	return err
 }
