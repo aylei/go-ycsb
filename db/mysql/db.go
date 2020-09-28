@@ -243,6 +243,20 @@ func (db *mysqlDB) queryContextInNewConn(ctx context.Context, query string, args
 	return conn.QueryContext(ctx, query, args...)
 }
 
+func (db *mysqlDB) execContextInNewConn(ctx context.Context, query string, args ...interface{}) error {
+	conn, err := db.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := conn.Close(); err != nil && !db.p.GetBool(prop.Silence, prop.SilenceDefault){
+			fmt.Printf("err closing mysql connection: %v\n", err)
+		}
+	}()
+	_, err = conn.ExecContext(ctx, query, args...)
+	return err
+}
+
 func (db *mysqlDB) clearCacheIfFailed(ctx context.Context, query string, err error) {
 	if err == nil {
 		return
@@ -349,7 +363,7 @@ func (db *mysqlDB) execQuery(ctx context.Context, query string, args ...interfac
 
 	var err error
 	if db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
-		_, err = db.queryContextInNewConn(ctx, query, args...)
+		err = db.execContextInNewConn(ctx, query, args...)
 	} else {
 		var stmt *sql.Stmt
 		stmt, err = db.getAndCacheStmt(ctx, query)
