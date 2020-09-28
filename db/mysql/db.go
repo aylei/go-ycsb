@@ -235,7 +235,11 @@ func (db *mysqlDB) queryContextInNewConn(ctx context.Context, query string, args
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil && !db.p.GetBool(prop.Silence, prop.SilenceDefault){
+			fmt.Printf("err closing mysql connection: %v\n", err)
+		}
+	}()
 	return conn.QueryContext(ctx, query, args...)
 }
 
@@ -243,12 +247,12 @@ func (db *mysqlDB) clearCacheIfFailed(ctx context.Context, query string, err err
 	if err == nil {
 		return
 	}
-
-	state := ctx.Value(stateKey).(*mysqlState)
-	if stmt, ok := state.stmtCache[query]; ok {
-		stmt.Close()
-	}
-	delete(state.stmtCache, query)
+	//
+	//state := ctx.Value(stateKey).(*mysqlState)
+	//if stmt, ok := state.stmtCache[query]; ok {
+	//	stmt.Close()
+	//}
+	//delete(state.stmtCache, query)
 }
 
 func (db *mysqlDB) queryRows(ctx context.Context, query string, count int, args ...interface{}) ([]map[string][]byte, error) {
