@@ -81,8 +81,8 @@ func (c mysqlCreator) Create(p *properties.Properties) (ycsb.DB, error) {
 
 	threadCount := int(p.GetInt64(prop.ThreadCount, prop.ThreadCountDefault))
 	if p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
-		// Large enough max open count to avoid reusing returned conn
-		db.SetMaxOpenConns(threadCount * 2)
+		// Unlimited max open to avoid reusing returned conn
+		db.SetMaxOpenConns(0)
 		// No idle conn, every conn is closed when returned to the pool
 		db.SetMaxIdleConns(-1)
 	} else {
