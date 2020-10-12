@@ -313,13 +313,25 @@ func (db *mysqlDB) queryRows(ctx context.Context, query string, count int, args 
 
 func (db *mysqlDB) Read(ctx context.Context, table string, key string, fields []string) (map[string][]byte, error) {
 	var query string
-	if len(fields) == 0 {
-		query = fmt.Sprintf(`SELECT * FROM %s %s WHERE YCSB_KEY = ?`, table, db.forceIndexKeyword)
+	var rows []map[string][]byte
+	var err error
+
+	if db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
+		if len(fields) == 0 {
+			query = fmt.Sprintf(`SELECT * FROM %s %s WHERE YCSB_KEY = "%s"`, table, db.forceIndexKeyword, key)
+		} else {
+			query = fmt.Sprintf(`SELECT %s FROM %s %s WHERE YCSB_KEY = "%s"`, strings.Join(fields, ","), table, db.forceIndexKeyword, key)
+		}
+		rows, err = db.queryRows(ctx, query, 1)
 	} else {
-		query = fmt.Sprintf(`SELECT %s FROM %s %s WHERE YCSB_KEY = ?`, strings.Join(fields, ","), table, db.forceIndexKeyword)
+		if len(fields) == 0 {
+			query = fmt.Sprintf(`SELECT * FROM %s %s WHERE YCSB_KEY = ?`, table, db.forceIndexKeyword)
+		} else {
+			query = fmt.Sprintf(`SELECT %s FROM %s %s WHERE YCSB_KEY = ?`, strings.Join(fields, ","), table, db.forceIndexKeyword)
+		}
+		rows, err = db.queryRows(ctx, query, 1, key)
 	}
 
-	rows, err := db.queryRows(ctx, query, 1, key)
 	if !db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
 		db.clearCacheIfFailed(ctx, query, err)
 	}
@@ -386,13 +398,25 @@ func (db *mysqlDB) Update(ctx context.Context, table string, key string, values 
 			buf.WriteString(", ")
 		}
 
-		buf.WriteString(p.Field)
-		buf.WriteString(`= ?`)
-		args = appendArgs(args, p.Value)
-	}
-	buf.WriteString(" WHERE YCSB_KEY = ?")
 
-	args = append(args, key)
+		buf.WriteString(p.Field)
+		if db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
+			buf.WriteString(`= `)
+			buf.Write(p.Value)
+		} else {
+			buf.WriteString(`= ?`)
+			args = appendArgs(args, p.Value)
+		}
+	}
+	if db.p.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
+		buf.WriteString(` WHERE YCSB_KEY = "`)
+		buf.WriteString(key)
+		buf.WriteRune('"')
+	} else {
+		buf.WriteString(" WHERE YCSB_KEY = ?")
+		args = append(args, key)
+	}
+
 
 	return db.execQuery(ctx, buf.String(), args...)
 }

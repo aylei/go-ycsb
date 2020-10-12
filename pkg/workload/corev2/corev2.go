@@ -22,6 +22,8 @@ import (
 type contextKey string
 
 const CoreV2StateKey = contextKey("corev2")
+const timestampLayout = "2006-01-02 15:04:05.000000"
+const quotedTimestampLayout = `"2006-01-02 15:04:05.000000"`
 
 const (
 	// maxTimestamp = "2038-01-19T03:14:07.999999Z"
@@ -98,6 +100,10 @@ func (c *corev2) buildRandomString(state *CoreV2State, size int) []byte {
 	r := state.R
 	buf := c.GetValueBuffer(size)
 	util.RandBytes(r, buf)
+	if c.P.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
+		ss := string(buf)
+		strconv.AppendQuote(buf, ss)
+	}
 	return buf
 }
 
@@ -112,7 +118,12 @@ func (c *corev2) buildRandomBool(state *CoreV2State) []byte {
 
 func (c *corev2) buildRandomTimestamp(state *CoreV2State) []byte {
 	randomUnixNano := state.R.Int63n(maxTimeUnixNano - minTimeUnixNano) + minTimeUnixNano
-	return []byte(time.Unix(0, randomUnixNano).Format("2006-01-02 15:04:05.000000"))
+
+	if c.P.GetBool(prop.UseShortConn, prop.UseShortConnDefault) {
+		return []byte(time.Unix(0, randomUnixNano).Format(quotedTimestampLayout))
+	} else {
+		return []byte(time.Unix(0, randomUnixNano).Format(timestampLayout))
+	}
 }
 
 func (c *corev2) buildValues(state *CoreV2State) (map[string][]byte, error) {
