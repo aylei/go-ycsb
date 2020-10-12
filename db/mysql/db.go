@@ -73,7 +73,7 @@ func (c mysqlCreator) Create(p *properties.Properties) (ycsb.DB, error) {
 	password := p.GetString(mysqlPassword, "")
 	dbName := p.GetString(mysqlDBName, "test")
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", user, password, host, port, dbName)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?no_ssps=1", user, password, host, port, dbName)
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
